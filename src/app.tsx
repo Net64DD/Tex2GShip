@@ -3,6 +3,9 @@ import './app.css'
 import type React from 'preact/compat';
 import type { CSSProperties, TargetedDragEvent, TargetedEvent } from 'preact';
 import { BlobReader, BlobWriter, ZipReader, ZipWriter, Uint8ArrayWriter } from '@zip.js/zip.js';
+import metadata from './manifest.json';
+import { PNG } from 'pngjs';
+import { PngJsImage } from './util/png';
 
 const App: React.FC = () => {
   const [isOver, setIsOver] = useState<boolean>(false);
@@ -50,6 +53,12 @@ const App: React.FC = () => {
     if (selectedFile) validateAndSetFile(selectedFile);
   };
 
+  const handleO2r = (path: string, data: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> => {
+    const raw = PNG.sync.read(Buffer.from(data));
+    const wrapper = new PngJsImage(raw);
+    return data;
+  }
+
   const handleDownload = async (): Promise<void> => {
     if (!file) return;
 
@@ -69,7 +78,12 @@ const App: React.FC = () => {
         if (!entry.directory) {
           const newPath = transformPath(entry.filename);
           const data = await entry.getData!(new Uint8ArrayWriter());
-          await zipWriter.add(newPath, new BlobReader(new Blob([data])));
+          if(newPath.endsWith('.png')){
+            const transformedData = handleO2r(newPath, data);
+            await zipWriter.add(newPath.replace('.png', ''), new BlobReader(new Blob([transformedData])));
+          } else {
+            await zipWriter.add(newPath, new BlobReader(new Blob([data])));
+          }
         }
 
         setProgress(Math.round(((i + 1) / entries.length) * 100));
