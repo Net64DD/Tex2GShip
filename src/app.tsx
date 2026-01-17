@@ -63,7 +63,7 @@ const App: React.FC = () => {
       textureType: TextureType.RGBA32bpp,
     };
     N64Graphics.convertRawToN64(texture, wrapper);
-    console.log(`Converted texture at ${path}:`, texture);
+    // console.log(`Converted texture at ${path}:`, texture);
 
     const info = (metadata as any)[path];
 
@@ -99,7 +99,7 @@ const App: React.FC = () => {
     output.writeInt32(texture.texDataSize);  // [0x58] Data Size
     output.writeBytes(texture.texData);      // [0x5C] Texture Data
 
-    console.log('Converted to O2R:', { hbyte, vpixel, dataSize: texture.texDataSize });
+    // console.log('Converted to O2R:', { hbyte, vpixel, dataSize: texture.texDataSize });
 
     return Buffer.from(output.toBuffer());
   }
@@ -124,8 +124,12 @@ const App: React.FC = () => {
           const newPath = transformPath(entry.filename);
           const data = await entry.getData!(new Uint8ArrayWriter());
           if(newPath.endsWith('.png')){
-            const transformedData = handleO2r(newPath.replace('alt/', '').replace('.png', ''), data);
-            await zipWriter.add(newPath.replace('.png', ''), new BlobReader(new Blob([transformedData])));
+            try {
+              const transformedData = handleO2r(newPath.replace('alt/', '').replace('.png', ''), data);
+              await zipWriter.add(newPath.replace('.png', ''), new BlobReader(new Blob([transformedData])));
+            } catch (e) {
+              console.error(`Failed to convert texture at ${newPath}:`, e);
+            }
           } else {
             await zipWriter.add(newPath, new BlobReader(new Blob([data])));
           }
