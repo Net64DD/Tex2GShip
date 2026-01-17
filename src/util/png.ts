@@ -40,7 +40,7 @@ export class PngJsImage implements N64Image {
             b: this.png.data[idx + 2],
             a: this.png.data[idx + 3],
             // In pngjs, we treat the Red channel as the index for paletted images
-            index: this.png.data[idx] 
+            index: this.png.data[idx]
         };
     }
 

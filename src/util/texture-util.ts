@@ -6,6 +6,7 @@
 // --- Types & Enums ---
 
 export enum TextureType {
+    Error,
     RGBA32bpp,
     RGBA16bpp,
     Palette4bpp,
@@ -15,11 +16,37 @@ export enum TextureType {
     GrayscaleAlpha4bpp,
     GrayscaleAlpha8bpp,
     GrayscaleAlpha16bpp,
-    Error
+}
+
+export const TexturePixelMultipliers = {
+    [TextureType.Error]: 0.0,
+    [TextureType.RGBA32bpp]: 4.0,
+    [TextureType.RGBA16bpp]: 2.0,
+    [TextureType.Palette4bpp]: 0.5,
+    [TextureType.Palette8bpp]: 1.0,
+    [TextureType.Grayscale4bpp]: 0.5,
+    [TextureType.Grayscale8bpp]: 1.0,
+    [TextureType.GrayscaleAlpha4bpp]: 0.5,
+    [TextureType.GrayscaleAlpha8bpp]: 1.0,
+    [TextureType.GrayscaleAlpha16bpp]: 2.0,
 }
 
 // Helper for TextureType logic
-const TextureTypeUtils = {
+export const TextureTypeUtils = {
+    numToTextureType(num: number): TextureType {
+        switch (num) {
+            case 1: return TextureType.RGBA32bpp;
+            case 2: return TextureType.RGBA16bpp;
+            case 3: return TextureType.Palette4bpp;
+            case 4: return TextureType.Palette8bpp;
+            case 5: return TextureType.Grayscale4bpp;
+            case 6: return TextureType.Grayscale8bpp;
+            case 7: return TextureType.GrayscaleAlpha4bpp;
+            case 8: return TextureType.GrayscaleAlpha8bpp;
+            case 9: return TextureType.GrayscaleAlpha16bpp;
+            default: return TextureType.Error;
+        }
+    },
     getBufferSize(type: TextureType, width: number, height: number): number {
         switch (type) {
             case TextureType.RGBA32bpp: return width * height * 4;
@@ -161,7 +188,6 @@ export class N64Graphics {
                             texData.set([r, r, r, 0xFF], pos);
                             break;
                         case 2:
-                            // In Dart code, case 2 sets alpha to pixel.g
                             texData.set([r, r, r, g], pos);
                             break;
                         case 3:

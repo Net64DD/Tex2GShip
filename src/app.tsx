@@ -1,11 +1,13 @@
 import { useRef, useState } from 'preact/hooks'
 import './app.css'
 import type React from 'preact/compat';
-import type { CSSProperties, TargetedDragEvent, TargetedEvent } from 'preact';
+import { h, type CSSProperties, type TargetedDragEvent, type TargetedEvent } from 'preact';
 import { BlobReader, BlobWriter, ZipReader, ZipWriter, Uint8ArrayWriter } from '@zip.js/zip.js';
 import metadata from './manifest.json';
 import { PNG } from 'pngjs';
 import { PngJsImage } from './util/png';
+import { N64Graphics, TexturePixelMultipliers, TextureType, TextureTypeUtils, type Texture } from './util/texture-util';
+import { BinaryWriter } from './util/bwriter';
 
 const App: React.FC = () => {
   const [isOver, setIsOver] = useState<boolean>(false);
@@ -54,9 +56,52 @@ const App: React.FC = () => {
   };
 
   const handleO2r = (path: string, data: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> => {
+    const output = new BinaryWriter();
     const raw = PNG.sync.read(Buffer.from(data));
     const wrapper = new PngJsImage(raw);
-    return data;
+    let texture: any = {
+      textureType: TextureType.RGBA32bpp,
+    };
+    N64Graphics.convertRawToN64(texture, wrapper);
+    console.log(`Converted texture at ${path}:`, texture);
+
+    const info = (metadata as any)[path];
+
+    const hbyte = !info ? 1.0 : (texture.width / info.textureWidth) * 
+      (TexturePixelMultipliers[TextureType.RGBA32bpp] / TexturePixelMultipliers[TextureTypeUtils.numToTextureType(info.textureType)]);
+    const vpixel = !info ? 1.0 : (texture.height / info.textureHeight);
+
+    const magic = BigInt(0xDEADBEEFDEADBEEF);
+
+    // OTR Header
+    output.writeInt32(0x00);       // [0x00] Endianness
+    output.writeInt32(0x4F544558); // [0x04] ResourceType 'OTEX'
+    output.writeInt32(1);          // [0x08] Game Version
+    output.writeInt64(magic);      // [0x0C] Magic
+    output.writeInt32(0);          // [0x10] Resource Version
+    output.writeInt8(1);           // [0x14] Custom
+    output.writeInt8(0);           // [0x15]
+    output.writeInt8(0);           // [0x16]
+    output.writeInt8(0);           // [0x17]
+    output.writeInt32(0);          // [0x18]
+    output.writeInt32(0);          // [0x1C]
+    while (output.getLength() < 0x40) {
+      output.writeInt32(0);
+    }
+
+    // Texture Header
+    output.writeInt32(texture.textureType);  // [0x40] Texture Type
+    output.writeInt32(texture.width);        // [0x44] Width
+    output.writeInt32(texture.height);       // [0x48] Height
+    output.writeInt32(1 << 0);               // [0x4C] Flags
+    output.writeFloat(hbyte);                // [0x50] HByte Scale
+    output.writeFloat(vpixel);               // [0x54] VPixel Scale
+    output.writeInt32(texture.texDataSize);  // [0x58] Data Size
+    output.writeBytes(texture.texData);      // [0x5C] Texture Data
+
+    console.log('Converted to O2R:', { hbyte, vpixel, dataSize: texture.texDataSize });
+
+    return Buffer.from(output.toBuffer());
   }
 
   const handleDownload = async (): Promise<void> => {
@@ -79,7 +124,7 @@ const App: React.FC = () => {
           const newPath = transformPath(entry.filename);
           const data = await entry.getData!(new Uint8ArrayWriter());
           if(newPath.endsWith('.png')){
-            const transformedData = handleO2r(newPath, data);
+            const transformedData = handleO2r(newPath.replace('alt/', '').replace('.png', ''), data);
             await zipWriter.add(newPath.replace('.png', ''), new BlobReader(new Blob([transformedData])));
           } else {
             await zipWriter.add(newPath, new BlobReader(new Blob([data])));
