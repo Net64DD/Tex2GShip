@@ -3,7 +3,8 @@ import './app.css'
 import type React from 'preact/compat';
 import { h, type CSSProperties, type TargetedDragEvent, type TargetedEvent } from 'preact';
 import { BlobReader, BlobWriter, ZipReader, ZipWriter, Uint8ArrayWriter } from '@zip.js/zip.js';
-import metadata from './manifest.json';
+import metadata_us from './manifest-jp.json';
+import metadata_jp from './manifest-jp.json';
 import { PNG } from 'pngjs';
 import { PngJsImage } from './util/png';
 import { N64Graphics, TexturePixelMultipliers, TextureType, TextureTypeUtils, type Texture } from './util/texture-util';
@@ -76,7 +77,12 @@ const App: React.FC = () => {
     N64Graphics.convertRawToN64(texture, wrapper);
     // console.log(`Converted texture at ${path}:`, texture);
 
+    const metadata = {...metadata_us, ...metadata_jp };
     const info = (metadata as any)[path];
+
+    if(!info) {
+      console.warn(path);
+    }
 
     const hbyte = !info ? 1.0 : (texture.width / info.textureWidth) * 
       (TexturePixelMultipliers[TextureType.RGBA32bpp] / TexturePixelMultipliers[TextureTypeUtils.numToTextureType(info.textureType)]);
