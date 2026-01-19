@@ -17,8 +17,8 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const transformPath = (oldPath: string): string => {
-    return oldPath.replace('gfx/', 'alt/')
+  const transformPath = (oldPath: string): string | undefined => {
+    const path = oldPath.replace('gfx/', 'alt/')
       .replace('.rgba32', '')
       .replace('.rgba16', '')
       .replace('.ia16', '')
@@ -28,6 +28,17 @@ const App: React.FC = () => {
       .replace('.i4', '')
       .replace('.ci8', '')
       .replace('.ci4', '');
+    
+    if(path.includes('textures/skyboxes')) {
+      return undefined;
+    }
+
+    if(path.includes('skybox_tiles')) {
+      let world = path.split('skybox_tiles/')[1].split('.')[0];
+      return path.replace('skybox_tiles', `skyboxes/${world}`);
+    }
+
+    return path;
   };
 
   const validateAndSetFile = (file: File): void => {
@@ -122,6 +133,9 @@ const App: React.FC = () => {
         const entry = entries[i];
         if (!entry.directory) {
           const newPath = transformPath(entry.filename);
+          if(newPath === undefined) {
+            continue;
+          }
           const data = await entry.getData!(new Uint8ArrayWriter());
           if(newPath.endsWith('.png')){
             try {
