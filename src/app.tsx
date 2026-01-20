@@ -1,14 +1,14 @@
 import { useRef, useState } from 'preact/hooks'
 import './app.css'
 import type React from 'preact/compat';
-import { h, type CSSProperties, type TargetedDragEvent, type TargetedEvent } from 'preact';
-import { BlobReader, BlobWriter, ZipReader, ZipWriter, Uint8ArrayWriter } from '@zip.js/zip.js';
-import metadata_us from './manifest-jp.json';
-import metadata_jp from './manifest-jp.json';
 import { PNG } from 'pngjs';
 import { PngJsImage } from './util/png';
-import { N64Graphics, TexturePixelMultipliers, TextureType, TextureTypeUtils, type Texture } from './util/texture-util';
 import { BinaryWriter } from './util/bwriter';
+import { h, type CSSProperties, type TargetedDragEvent, type TargetedEvent } from 'preact';
+import { BlobReader, BlobWriter, ZipReader, ZipWriter, Uint8ArrayWriter } from '@zip.js/zip.js';
+import { N64Graphics, TexturePixelMultipliers, TextureType, TextureTypeUtils, type Texture } from './util/texture-util';
+
+import { parse } from 'yaml';
 
 const App: React.FC = () => {
   const [isOver, setIsOver] = useState<boolean>(false);
@@ -28,9 +28,14 @@ const App: React.FC = () => {
       .replace('.i8', '')
       .replace('.i4', '')
       .replace('.ci8', '')
-      .replace('.ci4', '');
-    
+      .replace('.ci4', '')
+      .replace('mario/metal', 'mario/mario_metal')
+      .replace('main_menu_seg7_us', 'main_menu_seg7')
+      .replace('main_menu_seg7_jp', 'main_menu_seg7')
+      .replace('textures/skybox_tiles/cake', 'levels/ending/cake');
+
     if(path.includes('textures/skyboxes')) {
+      console.warn(`Skipping skybox texture at ${path}`);
       return undefined;
     }
 
@@ -67,7 +72,27 @@ const App: React.FC = () => {
     if (selectedFile) validateAndSetFile(selectedFile);
   };
 
-  const handleO2r = (path: string, data: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> => {
+  const getMetadata = async (path: string): Promise<any> => {
+    let versions = ['us', 'jp'];
+    for(const version of versions) {
+      try {
+        const url = `ymls/${version}/${path.split('/').slice(0, -1).join('/')}.yml`;
+        const response = await fetch(url);
+        if(response.ok) {
+          const text = await response.text();
+          const data = parse(text);
+          return data[path.split('/').pop()!];
+        } else {
+          console.error(`Metadata file not found for ${path} in version ${version}`);
+        }
+      } catch (e) {
+        console.warn(`Failed to fetch metadata for ${path} in version ${version}:`, e);
+      }
+    }
+    return undefined;
+  }
+
+  const handleO2r = async (path: string, data: Uint8Array<ArrayBuffer>): Promise<Uint8Array<ArrayBuffer>> => {
     const output = new BinaryWriter();
     const raw = PNG.sync.read(Buffer.from(data));
     const wrapper = new PngJsImage(raw);
@@ -76,17 +101,15 @@ const App: React.FC = () => {
     };
     N64Graphics.convertRawToN64(texture, wrapper);
     // console.log(`Converted texture at ${path}:`, texture);
-
-    const metadata = {...metadata_us, ...metadata_jp };
-    const info = (metadata as any)[path];
+    const info = await getMetadata(path);
 
     if(!info) {
       console.warn(path);
     }
 
-    const hbyte = !info ? 1.0 : (texture.width / info.textureWidth) * 
-      (TexturePixelMultipliers[TextureType.RGBA32bpp] / TexturePixelMultipliers[TextureTypeUtils.numToTextureType(info.textureType)]);
-    const vpixel = !info ? 1.0 : (texture.height / info.textureHeight);
+    const hbyte = !info ? 1.0 : (texture.width / info.width) * 
+      (TexturePixelMultipliers[TextureType.RGBA32bpp] / TexturePixelMultipliers[TextureTypeUtils.strToTextureType(info.format)]);
+    const vpixel = !info ? 1.0 : (texture.height / info.height);
 
     const magic = BigInt(0xDEADBEEFDEADBEEF);
 
@@ -145,7 +168,7 @@ const App: React.FC = () => {
           const data = await entry.getData!(new Uint8ArrayWriter());
           if(newPath.endsWith('.png')){
             try {
-              const transformedData = handleO2r(newPath.replace('alt/', '').replace('.png', ''), data);
+              const transformedData = await handleO2r(newPath.replace('alt/', '').replace('.png', ''), data);
               await zipWriter.add(newPath.replace('.png', ''), new BlobReader(new Blob([transformedData])));
             } catch (e) {
               console.error(`Failed to convert texture at ${newPath}:`, e);

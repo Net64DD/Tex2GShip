@@ -11,7 +11,8 @@
   "dependencies": {
     "@zip.js/zip.js": "^2.8.15",
     "pngjs": "^7.0.0",
-    "preact": "^10.27.2"
+    "preact": "^10.27.2",
+    "yaml": "^2.8.2"
   },
   "devDependencies": {
     "@preact/preset-vite": "^2.10.2",

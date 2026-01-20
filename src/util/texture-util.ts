@@ -44,7 +44,22 @@ export const TextureTypeUtils = {
             case 7: return TextureType.GrayscaleAlpha4bpp;
             case 8: return TextureType.GrayscaleAlpha8bpp;
             case 9: return TextureType.GrayscaleAlpha16bpp;
-            default: return TextureType.Error;
+            default: throw new Error(`Unknown texture type number: ${num}`);
+        }
+    },
+    strToTextureType(str: string): TextureType {
+        switch (str) {
+            case 'RGBA32': return TextureType.RGBA32bpp;
+            case 'RGBA16': return TextureType.RGBA16bpp;
+            case 'TLUT': return TextureType.RGBA16bpp;
+            case 'CI4': return TextureType.Palette4bpp;
+            case 'CI8': return TextureType.Palette8bpp;
+            case 'I4': return TextureType.Grayscale4bpp;
+            case 'I8': return TextureType.Grayscale8bpp;
+            case 'IA4': return TextureType.GrayscaleAlpha4bpp;
+            case 'IA8': return TextureType.GrayscaleAlpha8bpp;
+            case 'IA16': return TextureType.GrayscaleAlpha16bpp;
+            default: throw new Error(`Unknown texture type string: ${str}`);
         }
     },
     getBufferSize(type: TextureType, width: number, height: number): number {
