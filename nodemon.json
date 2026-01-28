@@ -1,0 +1,11 @@
+{
+    "watch": [
+        "test",
+        ".env"
+    ],
+    "ext": "ts",
+    "ignore": [
+        "src/*/.spec.ts"
+    ],
+    "exec": "node ./test/main.ts"
+}

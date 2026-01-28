@@ -1,14 +1,13 @@
-import { useRef, useState } from 'preact/hooks'
 import './app.css'
 import type React from 'preact/compat';
-import { PNG } from 'pngjs';
-import { PngJsImage } from './util/png';
-import { BinaryWriter } from './util/bwriter';
-import { h, type CSSProperties, type TargetedDragEvent, type TargetedEvent } from 'preact';
+import { useRef, useState } from 'preact/hooks'
+import { type CSSProperties, type TargetedDragEvent, type TargetedEvent } from 'preact';
 import { BlobReader, BlobWriter, ZipReader, ZipWriter, Uint8ArrayWriter } from '@zip.js/zip.js';
-import { N64Graphics, TexturePixelMultipliers, TextureType, TextureTypeUtils, type Texture } from './util/texture-util';
 
-import { parse } from 'yaml';
+import type { Resource, ResourceFactory } from './factory/resource';
+import { BinaryWriter } from './util/bwriter';
+
+import PNGTextureFactory from './factory/list/texture';
 
 const App: React.FC = () => {
   const [isOver, setIsOver] = useState<boolean>(false);
@@ -72,76 +71,31 @@ const App: React.FC = () => {
     if (selectedFile) validateAndSetFile(selectedFile);
   };
 
-  const getMetadata = async (path: string): Promise<any> => {
-    let versions = ['us', 'jp'];
-    for(const version of versions) {
-      try {
-        const url = `ymls/${version}/${path.split('/').slice(0, -1).join('/')}.yml`;
-        const response = await fetch(url);
-        if(response.ok) {
-          const text = await response.text();
-          const data = parse(text);
-          return data[path.split('/').pop()!];
-        } else {
-          console.error(`Metadata file not found for ${path} in version ${version}`);
-        }
-      } catch (e) {
-        console.warn(`Failed to fetch metadata for ${path} in version ${version}:`, e);
-      }
-    }
-    return undefined;
-  }
 
-  const handleO2r = async (path: string, data: Uint8Array<ArrayBuffer>): Promise<Uint8Array<ArrayBuffer>> => {
-    const output = new BinaryWriter();
-    const raw = PNG.sync.read(Buffer.from(data));
-    const wrapper = new PngJsImage(raw);
-    let texture: any = {
-      textureType: TextureType.RGBA32bpp,
-    };
-    N64Graphics.convertRawToN64(texture, wrapper);
-    // console.log(`Converted texture at ${path}:`, texture);
-    const info = await getMetadata(path);
+  const handleO2r = async (path: string, data: Uint8Array<ArrayBuffer>, factory: string): Promise<Uint8Array<ArrayBuffer>> => {
+    let instance: ResourceFactory<Resource>;
+    let info: any;
 
-    if(!info) {
-      console.warn(path);
+    switch(factory) {
+      case 'texture':
+        instance = new PNGTextureFactory();
+        info = { path, format: 'RGBA32bpp' };
+        break;
+      case 'geolayout':
+      case 'displaylist':
+      case 'animation':
+      case 'mesh':
+      default:
+        throw new Error(`Unknown factory type: ${factory}`);
     }
 
-    const hbyte = !info ? 1.0 : (texture.width / info.width) * 
-      (TexturePixelMultipliers[TextureType.RGBA32bpp] / TexturePixelMultipliers[TextureTypeUtils.strToTextureType(info.format)]);
-    const vpixel = !info ? 1.0 : (texture.height / info.height);
+    const buffer = Buffer.from(data);
+    const result = await instance.parse(buffer, info);
 
-    const magic = BigInt(0xDEADBEEFDEADBEEF);
+    const writer = new BinaryWriter();
+    await instance.export(writer, result);
 
-    // OTR Header
-    output.writeInt32(0x00);       // [0x00] Endianness
-    output.writeInt32(0x4F544558); // [0x04] ResourceType 'OTEX'
-    output.writeInt32(1);          // [0x08] Game Version
-    output.writeInt64(magic);      // [0x0C] Magic
-    output.writeInt32(0);          // [0x10] Resource Version
-    output.writeInt8(1);           // [0x14] Custom
-    output.writeInt8(0);           // [0x15]
-    output.writeInt8(0);           // [0x16]
-    output.writeInt8(0);           // [0x17]
-    output.writeInt32(0);          // [0x18]
-    output.writeInt32(0);          // [0x1C]
-    while (output.getLength() < 0x40) {
-      output.writeInt32(0);
-    }
-
-    // Texture Header
-    output.writeInt32(texture.textureType);  // [0x40] Texture Type
-    output.writeInt32(texture.width);        // [0x44] Width
-    output.writeInt32(texture.height);       // [0x48] Height
-    output.writeInt32(1 << 0);               // [0x4C] Flags
-    output.writeFloat(hbyte);                // [0x50] HByte Scale
-    output.writeFloat(vpixel);               // [0x54] VPixel Scale
-    output.writeInt32(texture.texDataSize);  // [0x58] Data Size
-    output.writeBytes(texture.texData);      // [0x5C] Texture Data
-
-    // console.log('Converted to O2R:', { hbyte, vpixel, dataSize: texture.texDataSize });
-
-    return Buffer.from(output.toBuffer());
+    return new Uint8Array(writer.toBuffer());
   }
 
   const handleDownload = async (): Promise<void> => {
@@ -168,7 +122,7 @@ const App: React.FC = () => {
           const data = await entry.getData!(new Uint8ArrayWriter());
           if(newPath.endsWith('.png')){
             try {
-              const transformedData = await handleO2r(newPath.replace('alt/', '').replace('.png', ''), data);
+              const transformedData = await handleO2r(newPath.replace('alt/', '').replace('.png', ''), data, 'texture');
               await zipWriter.add(newPath.replace('.png', ''), new BlobReader(new Blob([transformedData])));
             } catch (e) {
               console.error(`Failed to convert texture at ${newPath}:`, e);
